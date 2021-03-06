@@ -127,6 +127,22 @@ if(NOT _YACMACompilerLinkerSettingsRun)
         # This limit is supposed to be at least 1024 in C++11, but for some reason
         # clang sets this to 256, and gcc to 900.
         _YACMA_CHECK_ENABLE_CXX_FLAG(-ftemplate-depth=1024)
+
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fstrict-enums)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fstrict-aliasing)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-O3)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fipa-pta)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-ffast-math)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fno-keep-static-consts)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fdevirtualize-at-ltrans)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fvisibility-inlines-hidden)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fno-plt)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fno-stack-protector)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-fno-extern-tls-init)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-mbranches-within-32B-boundaries)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-march=native)
+        _YACMA_CHECK_ENABLE_CXX_FLAG(-mtune=native)
+
         _YACMA_CHECK_ENABLE_DEBUG_CXX_FLAG(-Wold-style-cast)
         # NOTE: disable this for now, as it results in a lot of clutter from Boost.
         # _YACMA_CHECK_ENABLE_CXX_FLAG(-Wzero-as-null-pointer-constant)
