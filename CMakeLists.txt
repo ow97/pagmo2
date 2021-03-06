@@ -1,5 +1,5 @@
 # CMake version check.
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.8)
 # NOTE: policy for using the CheckIPOSupported module:
 # https://cmake.org/cmake/help/latest/policy/CMP0069.html
 cmake_policy(SET CMP0069 NEW)
@@ -13,7 +13,7 @@ if(NOT CMAKE_BUILD_TYPE)
     FORCE)
 endif()
 
-project(pagmo VERSION 2.16.0 LANGUAGES CXX C)
+project(pagmo VERSION 2.17.0 LANGUAGES CXX C)
 
 # Setup module path.
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules" "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/yacma")
@@ -114,24 +114,32 @@ if(YACMA_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "8")
     unset(_PAGMO_GCC_SUPPORTS_NO_OVERRIDE)
 endif()
 
-# TBB.
-find_package(TBB REQUIRED)
+# TBB. Try to find it first in config mode (supported
+# since version 2021 after the oneTBB rename), and, if this
+# fails, fall back to our own FindTBB.cmake. This is of course
+# not an ideal solution, but it should work until oneTBB
+# becomes widely deployed.
+find_package(TBB QUIET CONFIG)
+if(NOT TBB_FOUND)
+    message(STATUS "TBB not found using config mode, retrying in module mode.")
+    find_package(TBB REQUIRED MODULE)
+else()
+    message(STATUS "TBB found using config mode.")
+endif()
 
 # Eigen3
 if(PAGMO_WITH_EIGEN3)
-    find_package(Eigen3 REQUIRED)
-    message(STATUS "Eigen include directory: ${EIGEN3_INCLUDE_DIR}")
-    message(STATUS "Eigen version detected: ${EIGEN3_VERSION}")
+    find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 endif()
 
 # NLopt
 if(PAGMO_WITH_NLOPT)
-    find_package(NLOPT REQUIRED COMPONENTS header libnlopt)
+    find_package(NLopt 2.6 REQUIRED NO_MODULE)
 endif()
 
 # Ipopt
 if(PAGMO_WITH_IPOPT)
-    find_package(IPOPT REQUIRED COMPONENTS header libipopt)
+    find_package(pagmo_IPOPT REQUIRED COMPONENTS header libipopt)
 endif()
 
 if(PAGMO_BUILD_TESTS)
@@ -302,8 +310,8 @@ if(PAGMO_BUILD_STATIC_LIBRARY)
     add_library(pagmo STATIC "${PAGMO_SRC_FILES}")
 else()
     add_library(pagmo SHARED "${PAGMO_SRC_FILES}")
-    set_property(TARGET pagmo PROPERTY VERSION "6.0")
-    set_property(TARGET pagmo PROPERTY SOVERSION 6)
+    set_property(TARGET pagmo PROPERTY VERSION "7.0")
+    set_property(TARGET pagmo PROPERTY SOVERSION 7)
     set_target_properties(pagmo PROPERTIES CXX_VISIBILITY_PRESET hidden)
     set_target_properties(pagmo PROPERTIES VISIBILITY_INLINES_HIDDEN TRUE)
 endif()
@@ -316,11 +324,10 @@ target_compile_options(pagmo PRIVATE
     "$<$<CONFIG:MinSizeRel>:${PAGMO_CXX_FLAGS_RELEASE}>"
 )
 
-# Let's setup the target C++ standard, but only if the user did not provide it manually.
-if(NOT CMAKE_CXX_STANDARD)
-    set_property(TARGET pagmo PROPERTY CXX_STANDARD 17)
-endif()
-set_property(TARGET pagmo PROPERTY CXX_STANDARD_REQUIRED YES)
+# Set the minimum C++ standard to C++17, both when building
+# and consuming pagmo.
+target_compile_features(pagmo PUBLIC cxx_std_17)
+# Enforce vanilla C++17 when compiling pagmo.
 set_property(TARGET pagmo PROPERTY CXX_EXTENSIONS NO)
 # NOTE: make sure the include directories from the current build
 # are included first, so that if there is already a pagmo installation
@@ -351,6 +358,8 @@ target_link_libraries(pagmo PUBLIC Threads::Threads)
 
 # Boost.
 target_link_libraries(pagmo PUBLIC Boost::boost Boost::serialization)
+# NOTE: quench warnings from Boost when building the library.
+target_compile_definitions(pagmo PRIVATE BOOST_ALLOW_DEPRECATED_HEADERS)
 
 # TBB.
 # NOTE: TBB is a private dependency because
@@ -360,19 +369,15 @@ target_link_libraries(pagmo PRIVATE TBB::tbb)
 
 if(PAGMO_WITH_EIGEN3)
     # Link pagmo to eigen3.
-    target_link_libraries(pagmo PUBLIC Eigen3::eigen3)
+    target_link_libraries(pagmo PUBLIC Eigen3::Eigen)
     set(PAGMO_ENABLE_EIGEN3 "#define PAGMO_WITH_EIGEN3")
 endif()
 
 if(PAGMO_WITH_NLOPT)
     # Link pagmo to NLopt.
     # NOTE: we make use of some NLopt types in the
-    # public pagmo interface, but we don't use any
-    # function from the library in the public headers.
-    # Thus, depend publicly on the header,
-    # privately on the compiled library.
-    target_link_libraries(pagmo PUBLIC NLOPT::header)
-    target_link_libraries(pagmo PRIVATE NLOPT::libnlopt)
+    # public pagmo interface.
+    target_link_libraries(pagmo PUBLIC NLopt::nlopt)
     set(PAGMO_ENABLE_NLOPT "#define PAGMO_WITH_NLOPT")
 endif()
 
@@ -383,8 +388,8 @@ if(PAGMO_WITH_IPOPT)
     # function from the library in the public headers.
     # Thus, depend publicly on the header,
     # privately on the compiled library.
-    target_link_libraries(pagmo PUBLIC IPOPT::header)
-    target_link_libraries(pagmo PRIVATE IPOPT::libipopt)
+    target_link_libraries(pagmo PUBLIC pagmo::IPOPT::header)
+    target_link_libraries(pagmo PRIVATE pagmo::IPOPT::libipopt)
     set(PAGMO_ENABLE_IPOPT "#define PAGMO_WITH_IPOPT")
 endif()
 
@@ -437,19 +442,18 @@ install(TARGETS pagmo
 # Setup of the optional deps.
 set(_PAGMO_CONFIG_OPTIONAL_DEPS)
 if(PAGMO_WITH_EIGEN3)
-    set(_PAGMO_CONFIG_OPTIONAL_DEPS "${_PAGMO_CONFIG_OPTIONAL_DEPS}find_package(Eigen3 REQUIRED)\n")
+    set(_PAGMO_CONFIG_OPTIONAL_DEPS "${_PAGMO_CONFIG_OPTIONAL_DEPS}find_package(Eigen3 3.3 REQUIRED NO_MODULE)\n")
 endif()
 if(PAGMO_WITH_NLOPT)
-    set(_PAGMO_CONFIG_OPTIONAL_DEPS "${_PAGMO_CONFIG_OPTIONAL_DEPS}find_package(NLOPT REQUIRED COMPONENTS header)\n")
+    set(_PAGMO_CONFIG_OPTIONAL_DEPS "${_PAGMO_CONFIG_OPTIONAL_DEPS}find_package(NLopt 2.6 REQUIRED NO_MODULE)\n")
 endif()
 if(PAGMO_WITH_IPOPT)
-    set(_PAGMO_CONFIG_OPTIONAL_DEPS "${_PAGMO_CONFIG_OPTIONAL_DEPS}find_package(IPOPT REQUIRED COMPONENTS header)\n")
+    set(_PAGMO_CONFIG_OPTIONAL_DEPS "${_PAGMO_CONFIG_OPTIONAL_DEPS}find_package(pagmo_IPOPT REQUIRED COMPONENTS header)\n")
 endif()
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/pagmo-config.cmake.in" "${CMAKE_CURRENT_BINARY_DIR}/pagmo-config.cmake" @ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pagmo-config.cmake" DESTINATION "lib/cmake/pagmo")
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/FindEigen3.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/FindNLOPT.cmake"
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/FindIPOPT.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/PagmoFindBoost.cmake"
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/Findpagmo_IPOPT.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/PagmoFindBoost.cmake"
     DESTINATION "lib/cmake/pagmo")
 install(EXPORT pagmo_export NAMESPACE Pagmo:: DESTINATION lib/cmake/pagmo)
 # Take care of versioning.
